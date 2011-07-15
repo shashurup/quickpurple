@@ -484,6 +484,7 @@ static void create_ui(GSequence* index)
   GtkCellRenderer* icon_rend = gtk_cell_renderer_pixbuf_new();
   GtkCellRenderer* text_rend = gtk_cell_renderer_text_new();
   GtkEntryBuffer* buffer = gtk_entry_get_buffer(entry);
+  gtk_window_set_title(win, "QuickPurple");
   gtk_window_set_type_hint(win, GDK_WINDOW_TYPE_HINT_DIALOG);
   gtk_widget_set_size_request((GtkWidget*)win, -1,256);
   gtk_window_set_position(win, GTK_WIN_POS_CENTER);
