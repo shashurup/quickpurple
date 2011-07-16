@@ -187,7 +187,7 @@ static GSList* search_index(GSequence* index, const gchar* str)
 
 // ui
 
-static void item_activate(item* item)
+static void item_activate(item* item, const char* param)
 {
   PurpleAccount* account;
   PurpleChat* chat;
@@ -228,9 +228,13 @@ static void item_activate(item* item)
       purple_status_set_active((PurpleStatus*)item->data, TRUE);
       break;
     case STATUS_PRIMITIVE:
-      saved = purple_savedstatus_find_transient_by_type_and_message(item->primitive, NULL);
+      saved = purple_savedstatus_find_transient_by_type_and_message(item->primitive, param);
       if (!saved)
+      {
         saved = purple_savedstatus_new(NULL, item->primitive);
+        if (param)
+          purple_savedstatus_set_message(saved, param);
+      }
       purple_savedstatus_activate(saved);
       break;      
     case STATUS_SAVED:
@@ -331,12 +335,21 @@ static void on_row_activated(GtkTreeView* tree, GtkTreePath* path,
   if (path)
   {
     GtkTreeModel* model = gtk_tree_view_get_model(tree);
+    GtkEntryBuffer* buffer = 
+      (GtkEntryBuffer*)g_object_get_data((GObject*)tree, "quickpurple-buffer");
     GtkTreeIter iter;
     if (gtk_tree_model_get_iter(model, &iter, path))
     {
       GValue value = {0, {{0}}};
       gtk_tree_model_get_value(model, &iter, 2, &value);
-      item_activate((item*)g_value_get_pointer(&value));
+      char* param = strchr(gtk_entry_buffer_get_text(buffer), ' ');
+      if (param)
+      {
+        ++param;
+        if (!*param)
+          param = NULL;
+      }
+      item_activate((item*)g_value_get_pointer(&value), param);
       gtk_widget_destroy((GtkWidget*)user_data);
     }
   }
@@ -367,7 +380,7 @@ static void move_selection(GtkTreeView* tree, gboolean up)
 static gboolean on_entry_key_pressed(GtkWidget* widget, 
     GdkEventKey* event, gpointer user_data)
 {
-  GtkTreeView* tree = (GtkTreeView*)g_object_get_data((GObject*)widget, "tree");
+  GtkTreeView* tree = (GtkTreeView*)g_object_get_data((GObject*)widget, "quickpurple-tree");
   if (event->keyval == GDK_KEY_Up ||
     ((event->state & GDK_CONTROL_MASK) && event->hardware_keycode == 0x2d))
   {
@@ -439,8 +452,10 @@ static GSList* get_unread_messages()
 static void on_changed(GtkEntryBuffer* buffer, GSequence* index)
 {
   const gchar* text = gtk_entry_buffer_get_text(buffer);
-  GSList* list = search_index(index, text);
-  GtkTreeView* tree = (GtkTreeView*)g_object_get_data((GObject*)buffer, "tree");
+  gchar** parts = g_strsplit_set(text, " ", 2);
+  GSList* list = search_index(index, parts[0] ? parts[0] : text);
+  g_strfreev(parts);
+  GtkTreeView* tree = (GtkTreeView*)g_object_get_data((GObject*)buffer, "quickpurple-tree");
   populate_tree(tree, list);
   g_slist_free(list);
 }
@@ -492,13 +507,13 @@ static void create_ui(GSequence* index)
   g_signal_connect((GtkWidget*)win, "destroy", (GCallback)on_destroy, index);
   g_signal_connect((GtkWidget*)win, "key-press-event",
       (GCallback)on_win_key_pressed, NULL);
-  g_object_set_data((GObject*)entry, "tree", tree);
+  g_object_set_data((GObject*)entry, "quickpurple-tree", tree);
   gtk_entry_set_width_chars(entry, 32);
   g_signal_connect((GtkWidget*)entry, "key-press-event",
       (GCallback)on_entry_key_pressed, NULL);
   g_signal_connect((GtkWidget*)buffer, "deleted-text", (GCallback)on_deleted, index);
   g_signal_connect((GtkWidget*)buffer, "inserted-text", (GCallback)on_inserted, index);
-  g_object_set_data((GObject*)buffer, "tree", tree);
+  g_object_set_data((GObject*)buffer, "quickpurple-tree", tree);
   gtk_scrolled_window_set_policy((GtkScrolledWindow*)scroll, 
       GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
   gtk_scrolled_window_set_shadow_type((GtkScrolledWindow*)scroll, GTK_SHADOW_IN);
@@ -510,6 +525,7 @@ static void create_ui(GSequence* index)
   gtk_tree_view_column_add_attribute(col, text_rend, "markup", 1);
   gtk_tree_view_append_column(tree, col);
   g_signal_connect((GtkWidget*)tree, "row-activated", (GCallback)on_row_activated, win);
+  g_object_set_data((GObject*)tree, "quickpurple-buffer", buffer);
   gtk_container_add((GtkContainer*)scroll, (GtkWidget*)tree);
   gtk_container_set_border_width((GtkContainer*)vbox, 4);
   gtk_box_pack_start((GtkBox*)vbox, (GtkWidget*)entry, FALSE, FALSE, 0);
@@ -579,7 +595,7 @@ static gboolean bind_hotkey(const char* hotkey)
 
 static gboolean quickpurple_load(PurplePlugin* plugin)
 {
-  char* hotkey = purple_prefs_get_string(HOTKEY_PREF);
+  const char* hotkey = purple_prefs_get_string(HOTKEY_PREF);
   bind_hotkey(hotkey);
 }
 
