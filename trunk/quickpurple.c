@@ -15,6 +15,7 @@
 #include <conversation.h>
 #include <gtkhotkey.h>
 #include <util.h>
+#include <gtkplugin.h>
 
 // index
 
@@ -538,6 +539,9 @@ static GList* plugin_actions(PurplePlugin* plugin, gpointer context)
 
 //Hotkey handling
 
+#define PREF_ROOT "/plugins/gtk/quickpurple"
+#define HOTKEY_PREF PREF_ROOT "/hotkey"
+
 static GtkHotkeyInfo* gtk_hotkey_info = NULL;
 
 static void on_hotkey(GtkHotkeyInfo* info, guint event_time, gpointer user_data)
@@ -545,26 +549,96 @@ static void on_hotkey(GtkHotkeyInfo* info, guint event_time, gpointer user_data)
   plugin_action_test_cb(NULL);
 }
 
+static void unbind_hotkey()
+{
+  if (gtk_hotkey_info)
+  {
+    gtk_hotkey_info_unbind(gtk_hotkey_info, NULL);
+    g_object_unref(gtk_hotkey_info);
+  }
+}
+
+static gboolean bind_hotkey(const char* hotkey)
+{
+  GtkHotkeyInfo* new_gtk_hotkey_info =
+    gtk_hotkey_info_new("Quickpurple", hotkey, hotkey, NULL);
+  if (new_gtk_hotkey_info)
+  {
+    g_object_ref(new_gtk_hotkey_info);
+    if (gtk_hotkey_info_bind(new_gtk_hotkey_info, NULL))
+    {
+      g_signal_connect(new_gtk_hotkey_info, "activated", (GCallback)on_hotkey, NULL);
+      unbind_hotkey();
+      gtk_hotkey_info = new_gtk_hotkey_info;
+      return TRUE;
+    }
+    g_object_unref(new_gtk_hotkey_info);
+  }
+  return FALSE;
+}
+
 static gboolean quickpurple_load(PurplePlugin* plugin)
 {
-  gtk_hotkey_info = gtk_hotkey_info_new("Quickpurple", "QuickpurpleShow",
-      "<Control><Alt>I", NULL);
-  if (gtk_hotkey_info && gtk_hotkey_info_bind(gtk_hotkey_info, NULL))
-      g_signal_connect(gtk_hotkey_info, "activated", (GCallback)on_hotkey, NULL);
+  char* hotkey = purple_prefs_get_string(HOTKEY_PREF);
+  bind_hotkey(hotkey);
 }
 
 static gboolean quickpurple_unload(PurplePlugin* plugin)
 {
-  if (gtk_hotkey_info)
-    gtk_hotkey_info_unbind(gtk_hotkey_info, NULL);
+  unbind_hotkey();
 }
+
+static gboolean on_hotkey_pressed(GtkWidget* entry, 
+    GdkEventKey* event, gpointer user_data)
+{
+  char* hotkey = gtk_accelerator_name(event->keyval, event->state);
+  GtkEntryBuffer* buffer = gtk_entry_get_buffer((GtkEntry*)entry);
+  gtk_entry_buffer_set_text(buffer, hotkey, -1);
+  g_free(hotkey);
+  return TRUE;
+}
+
+static void on_config_frame_destroy(GtkWidget* object, gpointer user_data)
+{
+  GtkEntryBuffer* buffer = (GtkEntryBuffer*)user_data;
+  const char* hotkey = gtk_entry_buffer_get_text(buffer);
+  if (bind_hotkey(hotkey))
+    purple_prefs_set_string(HOTKEY_PREF, hotkey);
+}
+
+static GtkWidget* quickpurple_config_frame(PurplePlugin *plugin)
+{
+  GtkWidget* frame = gtk_vbox_new(FALSE, 4);
+  GtkWidget* vbox = pidgin_make_frame(frame, "Hotkey");
+  GtkWidget* entry = gtk_entry_new();
+  GtkEntryBuffer* buffer = gtk_entry_get_buffer((GtkEntry*)entry);
+  if (gtk_hotkey_info)
+    gtk_entry_buffer_set_text(buffer, gtk_hotkey_info_get_signature(gtk_hotkey_info), -1);
+  gtk_container_set_border_width((GtkContainer*)frame, 8);
+  g_signal_connect(frame, "destroy", (GCallback)on_config_frame_destroy, buffer);
+  g_signal_connect(entry, "key-press-event",
+      (GCallback)on_hotkey_pressed, NULL);
+  gtk_container_add((GtkContainer*)vbox, entry);
+  gtk_widget_show_all(frame);
+  return frame;  
+}
+
+static PidginPluginUiInfo ui_info =
+{
+    quickpurple_config_frame,
+    0,
+    NULL,
+    NULL,
+    NULL,
+    NULL
+};
 
 static PurplePluginInfo info = {
     PURPLE_PLUGIN_MAGIC,
     PURPLE_MAJOR_VERSION,
     PURPLE_MINOR_VERSION,
     PURPLE_PLUGIN_STANDARD,
-    NULL,
+    PIDGIN_PLUGIN_TYPE,
     0,
     NULL,
     PURPLE_PRIORITY_DEFAULT,
@@ -576,13 +650,13 @@ static PurplePluginInfo info = {
     "Alternative Pidgin buddy list",          
     "Quickpurple plugin",          
     "George Kibardin <george.kibardin@gmail.com>",                          
-    "http://helloworld.tld",
+    "http://code.google.com/p/quickpurple",
     
     quickpurple_load,
     quickpurple_unload,                          
     NULL,                          
                                    
-    NULL,                          
+    &ui_info,                          
     NULL,                          
     NULL,                        
     plugin_actions,                   
@@ -594,6 +668,8 @@ static PurplePluginInfo info = {
 
 static void init_plugin(PurplePlugin *plugin)
 {
+  purple_prefs_add_none(PREF_ROOT);
+  purple_prefs_add_string(HOTKEY_PREF, "<Control><Alt>I");
 }
 
 PURPLE_INIT_PLUGIN(hello_purple, init_plugin, info)
