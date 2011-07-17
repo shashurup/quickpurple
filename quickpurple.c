@@ -547,7 +547,7 @@ static void create_ui(GSequence* index)
   GtkCellRenderer* icon_rend = gtk_cell_renderer_pixbuf_new();
   GtkCellRenderer* text_rend = gtk_cell_renderer_text_new();
   GtkEntryBuffer* buffer = gtk_entry_get_buffer(entry);
-  gtk_window_set_title(win, "QuickPurple");
+  gtk_window_set_title(win, "Quickpurple");
   gtk_window_set_type_hint(win, GDK_WINDOW_TYPE_HINT_DIALOG);
   gtk_widget_set_size_request((GtkWidget*)win, -1,256);
   gtk_window_set_position(win, GTK_WIN_POS_CENTER);
@@ -710,8 +710,8 @@ static PurplePluginInfo info = {
     "Quickpurple",
     "0.1",
 
-    "Buddy lookup for Pidgin",          
-    "Quickpurple plugin",          
+    "Quickpurple is a Pidgin control UI",          
+    "Quickpurple provides quick buddy lookup, status switch, unread messages list and access to some Pidgin dialogs",          
     "George Kibardin <george.kibardin@gmail.com>",                          
     "http://code.google.com/p/quickpurple",
     
