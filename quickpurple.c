@@ -16,6 +16,9 @@
 #include <gtkhotkey.h>
 #include <util.h>
 #include <gtkplugin.h>
+#include <core.h>
+#include <gtkaccount.h>
+#include <gtkprefs.h>
 
 // index
 
@@ -30,6 +33,13 @@ enum item_type
   MESSAGE
 };
 
+typedef struct _action
+{
+  const char* name;
+  void (*function)();
+  char* stock;
+} action;
+
 typedef struct _item
 {
   uint refs;
@@ -43,6 +53,27 @@ typedef struct _pair
   gchar* key;
   item* value;
 } pair;
+
+static void quit_pidgin()
+{
+  purple_timeout_add(0, purple_core_quit_cb, NULL);
+}
+
+static void add_buddy()
+{
+  purple_blist_request_add_buddy(NULL, NULL, NULL, NULL);
+}
+
+static action actions[] =
+{
+  { "Add buddy", add_buddy, GTK_STOCK_ADD },
+  { "Accounts", pidgin_accounts_window_show, NULL },
+  { "Preferences", pidgin_prefs_show, GTK_STOCK_PREFERENCES },
+  { "Plugins", pidgin_plugin_dialog_show, PIDGIN_STOCK_TOOLBAR_PLUGINS },
+  { "Quit", quit_pidgin, GTK_STOCK_QUIT }
+};
+
+static const gint num_actions = G_N_ELEMENTS(actions);
 
 static void on_destroy_pair(gpointer data)
 {
@@ -139,6 +170,13 @@ static GSequence* create_index()
     }
   }
   g_list_free(accounts);
+  for (i = 0; i < num_actions; ++i)
+  {
+    item *val = g_new0(item, 1);
+    val->type = ACTION;
+    val->data = &actions[i];
+    append_item(result, actions[i].name, val);
+  }
   g_sequence_sort(result, compare_pair, NULL);
   return result;
 }
@@ -197,6 +235,7 @@ static void item_activate(item* item, const char* param)
   GHashTable* components; 
   const char* name;
   PurpleSavedStatus *saved;
+  action* act;
   switch(item->type)
   {
     case CONTACT:
@@ -246,6 +285,8 @@ static void item_activate(item* item, const char* param)
         pidgin_conv_present_conversation(conv);
       break;
     case ACTION:
+      act = (action*)item->data;
+      act->function();
       break;
   }
 }
@@ -283,17 +324,22 @@ static gchar* item_get_text(item* item)
       g_free(msg);
       return text;
     case ACTION:
-      break;
+      return g_strdup(((action*)item->data)->name);
   }
   return NULL;
+}
+
+static GdkPixbuf* render_stock_icon(const char* stock, GtkTreeView* tree)
+{
+	GtkIconSize size = gtk_icon_size_from_name(PIDGIN_ICON_SIZE_TANGO_EXTRA_SMALL);
+	return gtk_widget_render_icon((GtkWidget*)tree, stock, size, "GtkTreeView");
 }
 
 static GdkPixbuf* get_icon_for_primitive(
     PurpleStatusPrimitive primitive, GtkTreeView* tree)
 {
   const char* stock = pidgin_stock_id_from_status_primitive(primitive);
-	GtkIconSize size = gtk_icon_size_from_name(PIDGIN_ICON_SIZE_TANGO_EXTRA_SMALL);
-	return gtk_widget_render_icon((GtkWidget*)tree, stock, size, "GtkTreeView");
+  return render_stock_icon(stock, tree);
 }
 
 static GdkPixbuf* item_get_icon(item* item, GtkTreeView* tree)
@@ -314,6 +360,7 @@ static GdkPixbuf* item_get_icon(item* item, GtkTreeView* tree)
       return get_icon_for_primitive(
           purple_savedstatus_get_type((PurpleSavedStatus*)item->data), tree);
     case ACTION:
+      return render_stock_icon(((action*)item->data)->stock, tree);
     case MESSAGE:
       break;
   }
@@ -663,7 +710,7 @@ static PurplePluginInfo info = {
     "Quickpurple",
     "0.1",
 
-    "Alternative Pidgin buddy list",          
+    "Buddy lookup for Pidgin",          
     "Quickpurple plugin",          
     "George Kibardin <george.kibardin@gmail.com>",                          
     "http://code.google.com/p/quickpurple",
