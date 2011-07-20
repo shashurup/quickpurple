@@ -372,8 +372,37 @@ static GtkTreePath* get_selected_path(GtkTreeView* tree)
   GtkTreeSelection* sel = gtk_tree_view_get_selection(tree);
   GList* rows = gtk_tree_selection_get_selected_rows(sel, NULL);
   if (rows)
-    return (GtkTreePath*)rows->data;
+  {
+    GtkTreePath *result = (GtkTreePath*)rows->data;
+    if (rows->next)
+      g_list_foreach (rows->next, (GFunc)gtk_tree_path_free, NULL);
+    g_list_free(rows);
+    return result;
+  }
   return NULL;
+}
+
+static void move_selection(GtkTreeView* tree, gboolean up)
+{
+  GtkTreeSelection* sel = gtk_tree_view_get_selection(tree);
+  GtkTreePath* path = get_selected_path(tree);
+  if (!path)
+    path = gtk_tree_path_new_first();
+  if (up)
+  {
+    if (gtk_tree_path_prev(path))
+    {
+      gtk_tree_selection_select_path(sel, path);
+      gtk_tree_view_scroll_to_cell(tree, path, NULL, FALSE, 0, 0);
+    }
+  }
+  else
+  {
+    gtk_tree_path_next(path);
+    gtk_tree_selection_select_path(sel, path);
+    gtk_tree_view_scroll_to_cell(tree, path, NULL, FALSE, 0, 0);
+  }
+  gtk_tree_path_free(path);
 }
 
 static void on_row_activated(GtkTreeView* tree, GtkTreePath* path, 
@@ -402,28 +431,6 @@ static void on_row_activated(GtkTreeView* tree, GtkTreePath* path,
   }
 }
 
-static void move_selection(GtkTreeView* tree, gboolean up)
-{
-  GtkTreeSelection* sel = gtk_tree_view_get_selection(tree);
-  GtkTreePath* path = get_selected_path(tree);
-  if (!path)
-    path = gtk_tree_path_new_first();
-  if (up)
-  {
-    if (gtk_tree_path_prev(path))
-    {
-      gtk_tree_selection_select_path(sel, path);
-      gtk_tree_view_scroll_to_cell(tree, path, NULL, FALSE, 0, 0);
-    }
-  }
-  else
-  {
-    gtk_tree_path_next(path);
-    gtk_tree_selection_select_path(sel, path);
-    gtk_tree_view_scroll_to_cell(tree, path, NULL, FALSE, 0, 0);
-  }
-}
-
 static gboolean on_entry_key_pressed(GtkWidget* widget, 
     GdkEventKey* event, gpointer user_data)
 {
@@ -444,6 +451,7 @@ static gboolean on_entry_key_pressed(GtkWidget* widget,
   {
     GtkTreePath* path = get_selected_path(tree);
     gtk_tree_view_row_activated(tree, path, gtk_tree_view_get_column(tree, 0));
+    gtk_tree_path_free(path);
     return TRUE;
   }
   return FALSE;
