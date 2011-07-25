@@ -652,11 +652,13 @@ static gboolean quickpurple_load(PurplePlugin* plugin)
 {
   const char* hotkey = purple_prefs_get_string(HOTKEY_PREF);
   bind_hotkey(hotkey);
+  return TRUE;
 }
 
 static gboolean quickpurple_unload(PurplePlugin* plugin)
 {
   unbind_hotkey();
+  return TRUE;
 }
 
 static gboolean on_hotkey_pressed(GtkWidget* entry, 
