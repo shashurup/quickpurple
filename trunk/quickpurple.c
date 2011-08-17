@@ -83,7 +83,7 @@ typedef struct _transformation
   gchar* str;
 } transformation;
 
-static GSList* transform(gchar* str)
+static GSList* transform(const gchar* str)
 {
   uint i;
   uint pos = 0;
@@ -93,8 +93,6 @@ static GSList* transform(gchar* str)
   GSList* result = NULL;
   XkbStateRec state;
   XkbGetState(gdk_x11_get_default_xdisplay(), XkbUseCoreKbd, &state);
-  printf("%s\n", str);
-  printf("Locked group: %d\n", state.locked_group);
   for ( ; *str; str = g_utf8_next_char(str))
   {
     GdkKeymapKey* keys;
@@ -104,11 +102,8 @@ static GSList* transform(gchar* str)
           gdk_unicode_to_keyval(g_utf8_get_char(str)), &keys, &nkeys))
     {
       for (i = 0; i < nkeys; i++)
-      {
-        printf("Group: %d, code: %x\n", keys[i].group, keys[i].keycode);
         if (keys[i].group == state.locked_group)
           codes[pos] = keys[i].keycode;
-      }
     }
     if (!codes[pos])
       return NULL;
@@ -126,10 +121,7 @@ static GSList* transform(gchar* str)
       for (i = 0; i < n; i++)
         if (keys[i].group != state.locked_group
             && keys[i].level == 0 && keys[i].group < 4)
-        {
-          printf("Group: %d, char: %x\n", keys[i].group, gdk_keyval_to_unicode(keyvals[i]));
           strings[keys[i].group * slen + pos] = gdk_keyval_to_unicode(keyvals[i]);
-        }
     }
   }
   for (i = 0; i < 4; i++)
@@ -142,11 +134,11 @@ static GSList* transform(gchar* str)
       tr->group = i;
       tr->str = str;
       result = g_slist_append(result, tr);
-      printf("Group: %d, %s\n", i, str);
     }
     else
       g_free(str);
   }
+  return result;
 }
 
 static void on_destroy_pair(gpointer data)
@@ -582,7 +574,31 @@ static void on_changed(GtkEntryBuffer* buffer, GSequence* index)
 {
   const gchar* text = gtk_entry_buffer_get_text(buffer);
   gchar** parts = g_strsplit_set(text, " ", 2);
-  GSList* list = search_index(index, parts[0] ? parts[0] : text);
+  const gchar* key = parts[0] ? parts[0] : text;
+  GSList* list = search_index(index, key);
+  if (!list)
+  {
+    GSList* alts = transform(key);
+    GSList* cur = alts;
+    transformation* tr = NULL;
+    for (; cur && !list; cur = cur->next)
+    {
+      tr = (transformation*)cur->data;
+      list = search_index(index, tr->str);
+    }
+    if (list)
+    {
+      gtk_entry_buffer_set_text(buffer, tr->str, -1);
+      XkbLockGroup(gdk_x11_get_default_xdisplay(), XkbUseCoreKbd, tr->group);
+    }
+    for (cur = alts; cur; cur = cur->next)
+    {
+      tr = (transformation*)cur->data;
+      g_free(tr->str);
+      g_free(tr);
+    }
+    g_slist_free(alts);
+  }
   g_strfreev(parts);
   GtkTreeView* tree = (GtkTreeView*)g_object_get_data((GObject*)buffer, "quickpurple-tree");
   populate_tree(tree, list);
@@ -815,8 +831,6 @@ static PurplePluginInfo info = {
 
 static void init_plugin(PurplePlugin *plugin)
 {
-//  transform("qwerty");
-//  transform("йцукен");
   purple_prefs_add_none(PREF_ROOT);
   purple_prefs_add_string(HOTKEY_PREF, "<Control><Alt>I");
 }
