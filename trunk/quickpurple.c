@@ -1,5 +1,7 @@
 #define PURPLE_PLUGINS
 
+#include <X11/XKBlib.h>
+#include <gdk/gdk.h>
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 #include <plugin.h>
@@ -74,6 +76,78 @@ static action actions[] =
 };
 
 static const gint num_actions = G_N_ELEMENTS(actions);
+
+typedef struct _transformation
+{
+  uint group;
+  gchar* str;
+} transformation;
+
+static GSList* transform(gchar* str)
+{
+  uint i;
+  uint pos = 0;
+  uint slen = g_utf8_strlen(str, -1);
+  uint* codes = g_newa(uint, slen);
+  uint* strings = g_newa(uint, 4 * slen);
+  GSList* result = NULL;
+  XkbStateRec state;
+  XkbGetState(gdk_x11_get_default_xdisplay(), XkbUseCoreKbd, &state);
+  printf("%s\n", str);
+  printf("Locked group: %d\n", state.locked_group);
+  for ( ; *str; str = g_utf8_next_char(str))
+  {
+    GdkKeymapKey* keys;
+    guint nkeys;
+    codes[pos] = 0;
+    if (gdk_keymap_get_entries_for_keyval(NULL,
+          gdk_unicode_to_keyval(g_utf8_get_char(str)), &keys, &nkeys))
+    {
+      for (i = 0; i < nkeys; i++)
+      {
+        printf("Group: %d, code: %x\n", keys[i].group, keys[i].keycode);
+        if (keys[i].group == state.locked_group)
+          codes[pos] = keys[i].keycode;
+      }
+    }
+    if (!codes[pos])
+      return NULL;
+    pos++;
+  }
+  memset(strings, 0, 4 * slen * sizeof(uint));
+  for (pos = 0; pos < slen; pos++)
+  {
+    GdkKeymapKey* keys;
+    guint* keyvals;
+    guint n;
+    if (gdk_keymap_get_entries_for_keycode(NULL, codes[pos],
+      &keys, &keyvals, &n))
+    {
+      for (i = 0; i < n; i++)
+        if (keys[i].group != state.locked_group
+            && keys[i].level == 0 && keys[i].group < 4)
+        {
+          printf("Group: %d, char: %x\n", keys[i].group, gdk_keyval_to_unicode(keyvals[i]));
+          strings[keys[i].group * slen + pos] = gdk_keyval_to_unicode(keyvals[i]);
+        }
+    }
+  }
+  for (i = 0; i < 4; i++)
+  {
+    long read;
+    gchar* str = g_ucs4_to_utf8(&strings[i * slen], slen, &read, NULL, NULL);
+    if (read == slen)
+    {
+      transformation* tr = g_new(transformation, 1);
+      tr->group = i;
+      tr->str = str;
+      result = g_slist_append(result, tr);
+      printf("Group: %d, %s\n", i, str);
+    }
+    else
+      g_free(str);
+  }
+}
 
 static void on_destroy_pair(gpointer data)
 {
@@ -718,7 +792,7 @@ static PurplePluginInfo info = {
 
     "gtk-shashurup-quickpurple",
     "Quickpurple",
-    "0.1",
+    "0.3",
 
     "Quickpurple is a Pidgin control UI",          
     "Quickpurple provides quick buddy lookup, status switch, unread messages list and access to some Pidgin dialogs",          
@@ -741,6 +815,8 @@ static PurplePluginInfo info = {
 
 static void init_plugin(PurplePlugin *plugin)
 {
+//  transform("qwerty");
+//  transform("йцукен");
   purple_prefs_add_none(PREF_ROOT);
   purple_prefs_add_string(HOTKEY_PREF, "<Control><Alt>I");
 }
