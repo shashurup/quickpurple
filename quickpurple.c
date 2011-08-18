@@ -87,11 +87,11 @@ static GSList* transform(const gchar* str)
 {
   uint i, pos = 0;
   uint slen = g_utf8_strlen(str, -1);
-  uint* strings = g_newa(uint, XkbNumKbdGroups * slen);
+  uint* codes = g_newa(uint, XkbNumKbdGroups * slen);
   GSList* result = NULL;
   XkbStateRec state;
   XkbGetState(gdk_x11_get_default_xdisplay(), XkbUseCoreKbd, &state);
-  memset(strings, 0, XkbNumKbdGroups * slen * sizeof(uint));
+  memset(codes, 0, XkbNumKbdGroups * slen * sizeof(uint));
   for ( ; *str; str = g_utf8_next_char(str))
   {
     GdkKeymapKey* keys;
@@ -114,7 +114,7 @@ static GSList* transform(const gchar* str)
         for (i = 0; i < nkeys; i++)
           if (keys[i].group != state.locked_group
               && keys[i].level == 0 && keys[i].group < XkbNumKbdGroups)
-            strings[keys[i].group * slen + pos] = gdk_keyval_to_unicode(keyvals[i]);
+            codes[keys[i].group * slen + pos] = gdk_keyval_to_unicode(keyvals[i]);
         g_free(keys);
         g_free(keyvals);
       }
@@ -126,7 +126,7 @@ static GSList* transform(const gchar* str)
   for (i = 0; i < XkbNumKbdGroups; i++)
   {
     long read;
-    gchar* str = g_ucs4_to_utf8(&strings[i * slen], slen, &read, NULL, NULL);
+    gchar* str = g_ucs4_to_utf8(&codes[i * slen], slen, &read, NULL, NULL);
     if (read == slen)
     {
       transformation* tr = g_new(transformation, 1);
