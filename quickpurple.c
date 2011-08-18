@@ -85,46 +85,45 @@ typedef struct _transformation
 
 static GSList* transform(const gchar* str)
 {
-  uint i;
-  uint pos = 0;
+  uint i, pos = 0;
   uint slen = g_utf8_strlen(str, -1);
-  uint* codes = g_newa(uint, slen);
-  uint* strings = g_newa(uint, 4 * slen);
+  uint* strings = g_newa(uint, XkbNumKbdGroups * slen);
   GSList* result = NULL;
   XkbStateRec state;
   XkbGetState(gdk_x11_get_default_xdisplay(), XkbUseCoreKbd, &state);
+  memset(strings, 0, XkbNumKbdGroups * slen * sizeof(uint));
   for ( ; *str; str = g_utf8_next_char(str))
   {
     GdkKeymapKey* keys;
+    guint* keyvals;
     guint nkeys;
-    codes[pos] = 0;
+    guint keycode = 0;
     if (gdk_keymap_get_entries_for_keyval(NULL,
           gdk_unicode_to_keyval(g_utf8_get_char(str)), &keys, &nkeys))
     {
       for (i = 0; i < nkeys; i++)
         if (keys[i].group == state.locked_group)
-          codes[pos] = keys[i].keycode;
+        {
+          keycode = keys[i].keycode;
+          break;
+        }
+      g_free(keys);
+      if (keycode && gdk_keymap_get_entries_for_keycode(NULL, keycode,
+            &keys, &keyvals, &nkeys))
+      {
+        for (i = 0; i < nkeys; i++)
+          if (keys[i].group != state.locked_group
+              && keys[i].level == 0 && keys[i].group < XkbNumKbdGroups)
+            strings[keys[i].group * slen + pos] = gdk_keyval_to_unicode(keyvals[i]);
+        g_free(keys);
+        g_free(keyvals);
+      }
     }
-    if (!codes[pos])
+    if (!keycode)
       return NULL;
     pos++;
   }
-  memset(strings, 0, 4 * slen * sizeof(uint));
-  for (pos = 0; pos < slen; pos++)
-  {
-    GdkKeymapKey* keys;
-    guint* keyvals;
-    guint n;
-    if (gdk_keymap_get_entries_for_keycode(NULL, codes[pos],
-      &keys, &keyvals, &n))
-    {
-      for (i = 0; i < n; i++)
-        if (keys[i].group != state.locked_group
-            && keys[i].level == 0 && keys[i].group < 4)
-          strings[keys[i].group * slen + pos] = gdk_keyval_to_unicode(keyvals[i]);
-    }
-  }
-  for (i = 0; i < 4; i++)
+  for (i = 0; i < XkbNumKbdGroups; i++)
   {
     long read;
     gchar* str = g_ucs4_to_utf8(&strings[i * slen], slen, &read, NULL, NULL);
