@@ -5,7 +5,7 @@ This plugin is intended for those of you who has >100 buddies in your buddy list
 #Installing QuickPurple
   * Get sources
   * Ensure dependencies. You need Pidgin and [Gtk Hotkey](https://launchpad.net/gtkhotkey) installed.
-  * Build !QuickPurple: make
+  * Build QuickPurple: make
   * Install it (as root): make install
 
 #Launching QuickPurple
